@@ -1,49 +1,107 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../interfaces/ITokenSwap.sol";
-
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-abstract contract P2PSwap is ITokenSwap {
-    uint256 public swapLength;
+abstract contract P2PSwap {
+    using SafeERC20 for IERC20;
 
-    mapping(uint256 => ITokenSwap.Swap) swaps;
+    address public buyer = address(0);
+    address public seller = address(0);
 
-    function createAsk(
-        address seller,
-        address buyer,
-        address askToken,
-        uint256 askAmount,
-        uint256 askExpires
-    ) external returns (uint256) {
-        require(buyer != seller, "P2PSwap: same buyer and seller");
-        require(buyer != address(0), "P2PSwap: buyer is null");
-        require(seller != address(0), "P2PSwap: seller is null");
-        Swap storage swap = swaps[swapLength];
-        swap.seller = seller;
-        swap.buyer = buyer;
-        swap.ask.token = askToken;
-        swap.ask.amount = askAmount;
-        swap.ask.expires = askExpires;
-        return swapLength++;
+    IERC20 public bidToken;
+
+    IERC20 public sellToken;
+    uint256 public sellAmount;
+    
+    enum SwapState {
+        Uninitialized, Ask, Bid, Cancelled, Fulfilled
     }
 
-    function addBid(uint256 swapId, 
-        address bidToken, uint256 bidAmount, uint256 bidExpires) 
-        external 
-    {
-        require(swapId < swapLength, "P2PSwap: swap id does not exist");
-        Swap storage swap = swaps[swapLength];
-        require(swap.isComplete, "P2PSwap: swap already completed");
-        require(block.timestamp < swap.ask.expires, "P2PSwap: ask expired");
-        swap.bid.amount = bidAmount;
-        swap.bid.expires = bidExpires;
-        swap.bid.token = bidToken;
+    SwapState public swapState = SwapState.Uninitialized;
+
+    modifier notCompleted() {
+        require(swapState != SwapState.Fulfilled, "P2PSwap: swap already fulfilled");
+        require(swapState != SwapState.Cancelled, "P2PSwap: swap already cancelled");
+        _;
     }
 
-    function swapInfo(uint256 swapId) public view returns (Swap memory) {
-        return swaps[swapId];
+    modifier uninitalized() {
+        require(swapState == SwapState.Uninitialized, "P2P: swap already initialized");
+        _;
     }
+
+    modifier askModeOnly() {
+        require(swapState == SwapState.Ask, "P2P: swap not in ask mode");
+        _;
+    }
+
+    modifier bidModeOnly() {
+        require(swapState == SwapState.Bid, "P2P: swap not in bid mode");
+        _;
+    }
+
+    modifier onlyBuyer() {
+        require(msg.sender == buyer, "P2PSwap: only allowed for buyer");
+        _;
+    }
+
+    modifier onlySeller() {
+        require(msg.sender == seller, "P2PSwap: only allowed for seller");
+        _;
+    }
+
+    event Ask(address indexed seller, address indexed buyer, address indexed sellToken, uint256 sellAmount);
+    event Bid(address indexed buyer, address indexed bidToken, uint256 bidAmount);
+    event Cancel(address indexed bidToken, uint256 bidAmount);
+    event Swap(address indexed sellToken, address indexed bidToken, uint256 sellAmount, uint256 bidAmount);
+
+    function ask(
+        address buyer_,
+        address sellToken_,
+        uint256 sellAmount_
+    ) external uninitalized {
+        require(buyer != msg.sender, "P2PSwap: buyer cannot be seller");
+        require(buyer != address(0), "P2PSwap: buyer cannot be null address");
+        require(sellAmount_ > 0, "P2PSwap: ask amount cannot be null");
+        require(sellToken_ != address(0), "P2PSwap: ask token cannot be null address");
+        seller = msg.sender;
+        buyer = buyer_;
+        sellAmount = sellAmount_;
+        sellToken = IERC20(sellToken_);        
+        swapState = SwapState.Ask;
+        emit Ask(buyer, seller, address(sellToken), sellAmount);
+    }
+
+    function bid(
+        address bidToken_,
+        uint256 bidAmount_
+    ) external onlySeller askModeOnly {
+        require(bidAmount_ > 0, "P2PSwap: bid amount cannot be null");
+        require(bidToken_ != address(0), "P2PSwap: bid token cannot be null address");
+        require(bidToken_ != address(sellToken), "P2PSwap: bid token cannot be ask token");
+        bidToken = IERC20(bidToken_);
+        bidToken.safeTransferFrom(msg.sender, address(this), bidAmount_);
+        swapState = SwapState.Bid;
+        emit Bid(buyer, address(bidToken), bidAmount_);
+    }
+
+    function cancel() external onlySeller bidModeOnly {
+        uint bidBalance = bidToken.balanceOf(address(this));
+        bidToken.safeTransfer(seller, bidBalance);
+        swapState = SwapState.Cancelled;
+        emit Cancel(address(bidToken), bidBalance);
+    }
+
+    function swap() external onlyBuyer bidModeOnly {
+        sellToken.safeTransferFrom(seller, address(this), sellAmount);
+        uint sellBalance = sellToken.balanceOf(address(this));
+        uint bidBalance = bidToken.balanceOf(address(this));
+        sellToken.safeTransfer(seller, sellBalance);
+        bidToken.safeTransfer(buyer, bidBalance);
+        swapState = SwapState.Fulfilled;
+        emit Swap(address(sellToken), address(bidToken), sellBalance, bidBalance);
+    }
+
 }
