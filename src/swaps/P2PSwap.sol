@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-abstract contract P2PSwap {
+contract P2PSwap {
     using SafeERC20 for IERC20;
 
     address public buyer = address(0);
@@ -62,8 +62,8 @@ abstract contract P2PSwap {
         address sellToken_,
         uint256 sellAmount_
     ) external uninitalized {
-        require(buyer != msg.sender, "P2PSwap: buyer cannot be seller");
-        require(buyer != address(0), "P2PSwap: buyer cannot be null address");
+        require(buyer_ != msg.sender, "P2PSwap: buyer cannot be seller");
+        require(buyer_ != address(0), "P2PSwap: buyer cannot be null address");
         require(sellAmount_ > 0, "P2PSwap: ask amount cannot be null");
         require(sellToken_ != address(0), "P2PSwap: ask token cannot be null address");
         seller = msg.sender;
@@ -77,7 +77,7 @@ abstract contract P2PSwap {
     function bid(
         address bidToken_,
         uint256 bidAmount_
-    ) external onlySeller askModeOnly {
+    ) external onlyBuyer askModeOnly {
         require(bidAmount_ > 0, "P2PSwap: bid amount cannot be null");
         require(bidToken_ != address(0), "P2PSwap: bid token cannot be null address");
         require(bidToken_ != address(sellToken), "P2PSwap: bid token cannot be ask token");
@@ -87,19 +87,19 @@ abstract contract P2PSwap {
         emit Bid(buyer, address(bidToken), bidAmount_);
     }
 
-    function cancel() external onlySeller bidModeOnly {
+    function cancel() external onlyBuyer bidModeOnly {
         uint bidBalance = bidToken.balanceOf(address(this));
         bidToken.safeTransfer(seller, bidBalance);
         swapState = SwapState.Cancelled;
         emit Cancel(address(bidToken), bidBalance);
     }
 
-    function swap() external onlyBuyer bidModeOnly {
+    function swap() external onlySeller bidModeOnly {
         sellToken.safeTransferFrom(seller, address(this), sellAmount);
         uint sellBalance = sellToken.balanceOf(address(this));
         uint bidBalance = bidToken.balanceOf(address(this));
-        sellToken.safeTransfer(seller, sellBalance);
-        bidToken.safeTransfer(buyer, bidBalance);
+        sellToken.safeTransfer(buyer, sellBalance);
+        bidToken.safeTransfer(seller, bidBalance);
         swapState = SwapState.Fulfilled;
         emit Swap(address(sellToken), address(bidToken), sellBalance, bidBalance);
     }
