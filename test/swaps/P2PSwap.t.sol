@@ -5,164 +5,137 @@ import "forge-std/Test.sol";
 
 import "../mocks/MockERC20.sol";
 
-import "../../src/swaps/P2PSwapFactory.sol";
+import "../utils/P2PSwapUtils.sol";
 import "../../src/swaps/P2PSwap.sol";
 
-contract P2PSwapTest is Test {
-    P2PSwap swap;
-
-    address deployer;
-    address alice;
-    address bob;
-
-    MockERC20 tokenA;
-    MockERC20 tokenB;
+contract P2PSwapTest is P2PSwapUtils {
 
     function setUp() public {
-        deployer = makeAddr("deployer");
-        alice = makeAddr("alice");
-        bob = makeAddr("bob");
-
-        tokenA = new MockERC20("Token A", "TOKA");
-        tokenB = new MockERC20("Token B", "TOKB");
-
-        swap = new P2PSwap();
+        reset_Swap();
+        assertTrue(swap.swapState() == P2PSwap.SwapState.Uninitialized, "swap is in unitialized state before ask");
     }
 
-    function test_fullSwap() public {
-        assertTrue(swap.swapState() == P2PSwap.SwapState.Uninitialized);
-        vm.startPrank(alice);
-        tokenA.mint(alice, 100 ether);
-        swap.ask(bob, address(tokenA), 100 ether);
-        vm.stopPrank();
-
-        assertTrue(swap.swapState() == P2PSwap.SwapState.Ask);
-        assertEq(swap.seller(), alice);
-        assertEq(address(swap.sellToken()), address(tokenA));
-        assertEq(swap.sellAmount(), 100 ether);
-
-        vm.startPrank(bob);
-        tokenB.mint(bob, 0.5 ether);
-        tokenB.approve(address(swap), 0.5 ether);
-        swap.bid(address(tokenB), 0.5 ether);
-        vm.stopPrank();
-
-        assertTrue(swap.swapState() == P2PSwap.SwapState.Bid);
-        assertEq(swap.buyer(), bob);
-        assertEq(address(swap.bidToken()), address(tokenB));
-        assertEq(tokenB.balanceOf(address(bob)), 0);
-        assertEq(tokenB.balanceOf(address(swap)), 0.5 ether);
-
-        vm.startPrank(alice);
-        tokenA.approve(address(swap), 100 ether);
-        swap.swap();
-        vm.stopPrank();
-
-        assertEq(tokenA.balanceOf(address(alice)), 0);
-        assertEq(tokenA.balanceOf(address(bob)), 100 ether);
-        assertEq(tokenA.balanceOf(address(swap)), 0);
-
-        assertEq(tokenB.balanceOf(address(alice)), 0.5 ether);
-        assertEq(tokenB.balanceOf(address(bob)), 0);
-        assertEq(tokenB.balanceOf(address(swap)), 0);
-
-        assertTrue(swap.swapState() == P2PSwap.SwapState.Fulfilled);
-    }
-
-    function test_swapModes() public {
-        // Setup token balances and allowances
-        tokenA.mint(alice, 100000 ether);
-        vm.prank(alice);
-        tokenA.approve(address(swap), 100000 ether);
-        tokenB.mint(bob, 100000 ether);
-        vm.prank(bob);
-        tokenB.approve(address(swap), 100000 ether);
-        assertTrue(swap.swapState() == P2PSwap.SwapState.Uninitialized);
+    function test_Alice_fulffils_Swap() public {
         
+        alice_offers_10_TokenA_to_Bob();
+        assertTrue(swap.swapState() == P2PSwap.SwapState.Ask, "swap is in ask state after alice offers 10 TOKA to bob");
+        assertEq(swap.seller(), alice, "seller is alice after alice offers 10 TOKA to bob");
+        assertEq(address(swap.sellToken()), address(tokenA), "sell token is TOKA  after alice offers 10 TOKA to bob");
+        assertEq(swap.sellAmount(), 10 ether, "sell amount is 10 TOKA  after alice offers 10 TOKA to bob");
+
+        uint256 alicesBalanceA = tokenA.balanceOf(alice);
+        uint256 bobsBalanceA = tokenA.balanceOf(bob);
+        uint256 alicesBalanceB = tokenB.balanceOf(alice);
+        uint256 bobsBalanceB = tokenB.balanceOf(bob);
+        bob_bids_10_TokenB();
+        assertTrue(swap.swapState() == P2PSwap.SwapState.Bid, "swap is in bid state after bob bids 10 TOKB");
+        assertEq(swap.buyer(), bob, "buyer is bob after bob bids 10 TOKB");
+        assertEq(address(swap.bidToken()), address(tokenB), "bid token is TOKB after bob bids 10 TOKB");
+        assertEq(tokenB.balanceOf(bob), bobsBalanceB - 10 ether, "bobs balance TOKB is down 10 TOKB after bob bids 10 TOKB");
+        assertEq(tokenB.balanceOf(address(swap)), 10 ether, "swap contract owns 10 TOKB after bob bids 10 TOKB");
+        assertEq(tokenA.balanceOf(alice), alicesBalanceA, "alices balance TOKA is uneffected after bob bids 10 TOKB");
+        assertEq(tokenA.balanceOf(bob), bobsBalanceA, "bobs balance TOKA is uneffected after bob bids 10 TOKB");
+
+        alicesBalanceA = tokenA.balanceOf(alice);
+        bobsBalanceA = tokenA.balanceOf(bob);
+        alicesBalanceB = tokenB.balanceOf(alice);
+        bobsBalanceB = tokenB.balanceOf(bob);
+        alice_fulfills_Swap();
+
+        assertTrue(swap.swapState() == P2PSwap.SwapState.Fulfilled, "swap is in fulfilled state after alice fulfills the swap");
+        assertEq(tokenA.balanceOf(alice), alicesBalanceA - 10 ether, "alice is down 10 TOKA after alice fulfills the swap");
+        assertEq(tokenA.balanceOf(bob), bobsBalanceA + 10 ether, "bob is up 10 TOKA after alice fulfills the swap");
+        assertEq(tokenA.balanceOf(address(swap)), 0, "swap contract has no more TOKA after alice fulfills the swap");
+
+        assertEq(tokenB.balanceOf(address(alice)), alicesBalanceB + 10 ether, "alice is up 10 TOKB after alice fulfills the swap");
+        assertEq(tokenB.balanceOf(address(bob)), bobsBalanceB, "bobs balance of TOKB is uneffected after alice fulfills the swap");
+        assertEq(tokenB.balanceOf(address(swap)), 0, "swap contract has no more TOKB after alice fulfills the swap");
+    }
+
+    function test_Bob_Cancels_Swap() public {
+        alice_offers_10_TokenA_to_Bob();
+        bob_bids_10_TokenB();
+        
+        uint256 bobsBalanceB = tokenB.balanceOf(bob);
+        bob_cancels_Swap();
+        assertTrue(swap.swapState() == P2PSwap.SwapState.Cancelled, "swap state is cancelled after bob cancels swap");
+        assertEq(tokenB.balanceOf(bob), bobsBalanceB + 10 ether, "bob gets his funds back after bob cancels swap");
+    }
+
+    function test_Swap_State_Failures() public {
+
+
         // Swap.State === Uninitialized
-        vm.startPrank(bob);
         vm.expectRevert(bytes("P2P: swap not in ask mode"));
-        swap.bid(address(tokenB), 10000 ether);
+        bob_bids_10_TokenB();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.cancel();
+        bob_cancels_Swap();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.swap();
-        vm.stopPrank();
+        alice_fulfills_Swap();
 
 
         // Swap.State === Ask
-        vm.startPrank(alice);
-        tokenA.mint(alice, 100 ether);
-        swap.ask(bob, address(tokenA), 100 ether);
-        vm.stopPrank();
-        vm.startPrank(alice);
+        alice_offers_10_TokenA_to_Bob();
+        
         vm.expectRevert(bytes("P2P: swap already initialized"));
-        swap.ask(bob, address(tokenB), 10000 ether);
-        vm.stopPrank();
-        vm.startPrank(bob);
+        alice_offers_10_TokenA_to_Bob();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.cancel();
+        bob_cancels_Swap();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.swap();
-        vm.stopPrank();
+        alice_fulfills_Swap();
+
 
         // Swap.State === Bid
-        vm.startPrank(bob);
-        swap.bid(address(tokenB), 10000 ether);
-        vm.stopPrank();
-        vm.startPrank(alice);
+        bob_bids_10_TokenB();
+
         vm.expectRevert(bytes("P2P: swap already initialized"));
-        swap.ask(bob, address(tokenB), 10000 ether);
-        vm.stopPrank();
-        vm.startPrank(bob);
+        alice_offers_10_TokenA_to_Bob();
         vm.expectRevert(bytes("P2P: swap not in ask mode"));
-        swap.bid(address(tokenB), 10000 ether);
-        vm.stopPrank();
+        bob_bids_10_TokenB();
 
         // Swap.State === Cancelled
-        vm.prank(bob);
-        swap.cancel();
-        vm.startPrank(alice);
+        bob_cancels_Swap();
+
         vm.expectRevert(bytes("P2P: swap already initialized"));
-        swap.ask(bob, address(tokenB), 10000 ether);
-        vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.swap();
-        vm.stopPrank();
-        vm.startPrank(bob);
+        alice_offers_10_TokenA_to_Bob();
         vm.expectRevert(bytes("P2P: swap not in ask mode"));
-        swap.bid(address(tokenB), 10000 ether);
+        bob_bids_10_TokenB();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap.cancel();
-        vm.stopPrank();
+        bob_cancels_Swap();
+        vm.expectRevert(bytes("P2P: swap not in bid mode"));
+        alice_fulfills_Swap();
 
         // Swap.State === Fulfilled
-        P2PSwap swap2 = new P2PSwap();
-        vm.prank(alice);
-        tokenA.approve(address(swap2), 100000 ether);
+        reset_Swap();
+        alice_offers_10_TokenA_to_Bob();
+        bob_bids_10_TokenB();
+        alice_fulfills_Swap();
 
-        vm.prank(bob);
-        tokenB.approve(address(swap2), 100000 ether);
-
-        vm.prank(alice);
-        swap2.ask(bob, address(tokenA), 10 ether);
-        vm.prank(bob);
-        swap2.bid(address(tokenB), 10 ether);
-        vm.prank(alice);
-        swap2.swap();
-        assertTrue(swap2.swapState() == P2PSwap.SwapState.Fulfilled);
-        vm.startPrank(alice);
         vm.expectRevert(bytes("P2P: swap already initialized"));
-        swap2.ask(bob, address(tokenB), 10000 ether);
-        vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap2.swap();
-        vm.stopPrank();
-        
-        vm.startPrank(bob);
+        alice_offers_10_TokenA_to_Bob();
         vm.expectRevert(bytes("P2P: swap not in ask mode"));
-        swap2.bid(address(tokenB), 10000 ether);
+        bob_bids_10_TokenB();
         vm.expectRevert(bytes("P2P: swap not in bid mode"));
-        swap2.cancel();
-        vm.stopPrank();
-
+        bob_cancels_Swap();
+        vm.expectRevert(bytes("P2P: swap not in bid mode"));
+        alice_fulfills_Swap();
     }
+
+    function test_Swap_Permissions_Failure() public {
+        alice_offers_10_TokenA_to_Bob();
+        
+        vm.prank(alice);
+        vm.expectRevert(bytes("P2PSwap: only allowed for buyer"));
+        swap.bid(address(tokenB), 10 ether);
+
+        bob_bids_10_TokenB();
+        vm.prank(alice);
+        vm.expectRevert(bytes("P2PSwap: only allowed for buyer"));
+        swap.cancel();
+
+        vm.prank(bob);
+        vm.expectRevert(bytes("P2PSwap: only allowed for seller"));
+        swap.swap();
+    }
+
 }

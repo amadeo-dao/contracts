@@ -89,7 +89,7 @@ contract P2PSwap {
 
     function cancel() external bidModeOnly onlyBuyer {
         uint bidBalance = bidToken.balanceOf(address(this));
-        bidToken.safeTransfer(seller, bidBalance);
+        bidToken.safeTransfer(buyer, bidBalance);
         swapState = SwapState.Cancelled;
         emit Cancel(address(bidToken), bidBalance);
     }
