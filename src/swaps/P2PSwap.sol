@@ -77,7 +77,7 @@ contract P2PSwap {
     function bid(
         address bidToken_,
         uint256 bidAmount_
-    ) external onlyBuyer askModeOnly {
+    ) external askModeOnly onlyBuyer  {
         require(bidAmount_ > 0, "P2PSwap: bid amount cannot be null");
         require(bidToken_ != address(0), "P2PSwap: bid token cannot be null address");
         require(bidToken_ != address(sellToken), "P2PSwap: bid token cannot be ask token");
@@ -87,14 +87,14 @@ contract P2PSwap {
         emit Bid(buyer, address(bidToken), bidAmount_);
     }
 
-    function cancel() external onlyBuyer bidModeOnly {
+    function cancel() external bidModeOnly onlyBuyer {
         uint bidBalance = bidToken.balanceOf(address(this));
         bidToken.safeTransfer(seller, bidBalance);
         swapState = SwapState.Cancelled;
         emit Cancel(address(bidToken), bidBalance);
     }
 
-    function swap() external onlySeller bidModeOnly {
+    function swap() external bidModeOnly onlySeller {
         sellToken.safeTransferFrom(seller, address(this), sellAmount);
         uint sellBalance = sellToken.balanceOf(address(this));
         uint bidBalance = bidToken.balanceOf(address(this));
