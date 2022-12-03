@@ -7,15 +7,11 @@ interface IPriceFeed {
   function token() 
     external 
     view 
-    returns (address);
+    returns (address token);
 
   function latestPrice()
     external
     view
-    returns (
-      uint256 price,
-      uint256 updatedAt,
-      int8 decimals
-    );
+    returns (uint256 price);
 
 }
