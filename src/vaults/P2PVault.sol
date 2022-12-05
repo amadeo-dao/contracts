@@ -6,12 +6,10 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgrad
 import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
-
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
     bytes32 public constant SHAREHOLDER_ROLE = keccak256("SHAREHOLDER_ROLE");
-
 
     uint256 public _assetsInUse;
 
@@ -26,11 +24,7 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
     event Loss(uint256 amount);
     event Fees(uint256 amount);
 
-    function initialize(
-        address asset_,
-        string memory name_,
-        string memory symbol_
-    ) public initializer {
+    function initialize(address asset_, string memory name_, string memory symbol_) public initializer {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _grantRole(MANAGER_ROLE, _msgSender());
         __AccessControl_init();
@@ -50,7 +44,7 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
         _grantRole(MANAGER_ROLE, newManager_);
     }
 
-    function isShareholder(address address_) public view returns(bool) {
+    function isShareholder(address address_) public view returns (bool) {
         return hasRole(SHAREHOLDER_ROLE, address_);
     }
 
@@ -81,11 +75,7 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
     }
 
     function returnAssets(uint256 amount_) public onlyRole(MANAGER_ROLE) {
-        IERC20Upgradeable(asset()).safeTransferFrom(
-            _msgSender(),
-            address(this),
-            amount_
-        );
+        IERC20Upgradeable(asset()).safeTransferFrom(_msgSender(), address(this), amount_);
         _assetsInUse = amount_ > _assetsInUse ? 0 : (_assetsInUse - amount_);
         emit ReturnAssets(amount_);
     }
@@ -96,13 +86,13 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
     }
 
     function loss(uint256 amount_) public onlyRole(MANAGER_ROLE) {
-        require(amount_<= _assetsInUse, "P2PVault: Loss cannot be higher than assets in use.");
+        require(amount_ <= _assetsInUse, "P2PVault: Loss cannot be higher than assets in use.");
         _assetsInUse -= amount_;
         emit Loss(amount_);
     }
 
     function fees(uint256 amount_) public onlyRole(MANAGER_ROLE) {
-        require(amount_<= _assetsInUse, "P2PVault: Fees cannot be higher than assets in use.");
+        require(amount_ <= _assetsInUse, "P2PVault: Fees cannot be higher than assets in use.");
         _assetsInUse -= amount_;
         emit Fees(amount_);
     }
@@ -115,22 +105,15 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
         return IERC20Upgradeable(asset()).balanceOf(address(this)) + _assetsInUse;
     }
 
-    function maxWithdraw(
-        address address_
-    ) public view virtual override returns (uint256) {
-        uint256 shares =  balanceOf(address_);
+    function maxWithdraw(address address_) public view virtual override returns (uint256) {
+        uint256 shares = balanceOf(address_);
         uint256 assets = _convertToAssets(shares, MathUpgradeable.Rounding.Down);
-        uint256 vaultBalance = IERC20Upgradeable(asset()).balanceOf(
-            address(this)
-        );
+        uint256 vaultBalance = IERC20Upgradeable(asset()).balanceOf(address(this));
         return MathUpgradeable.min(assets, vaultBalance);
     }
 
-    function maxRedeem(
-        address owner_
-    ) public view virtual override returns (uint256) {
+    function maxRedeem(address owner_) public view virtual override returns (uint256) {
         uint256 maxAssets = maxWithdraw(owner_);
         return _convertToShares(maxAssets, MathUpgradeable.Rounding.Down);
     }
-
 }

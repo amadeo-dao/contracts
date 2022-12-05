@@ -8,15 +8,21 @@ import "../mocks/MockERC20.sol";
 import "../../src/vaults/P2PVault.sol";
 
 contract P2PVaultUtils is Test {
-    
     P2PVault public vault;
 
     MockERC20 public asset;
-    
+
     address public deployer;
     address public alice;
     address public bob;
     address public charles;
+
+    uint256 alicesAssetBalance;
+    uint256 public bobsAssetBalance;
+    uint256 public vaultTotalAssets;
+    uint256 public vaultAssetBalance;
+    uint256 public vaultTotalShares;
+    uint256 public bobsShares;
 
     constructor() {
         deployer = makeAddr("deployer");
@@ -30,7 +36,7 @@ contract P2PVaultUtils is Test {
         asset.mint(charles, 100000 ether);
     }
 
-  function reset_Vault() public {
+    function reset_Vault() public {
         vm.startPrank(deployer);
         vault = new P2PVault();
 
@@ -47,7 +53,6 @@ contract P2PVaultUtils is Test {
         // Shares and asset balances are zero
         assertEq(asset.balanceOf(address(vault)), 0, "asset token balance of vault is not 0");
         assertEq(vault.totalSupply(), 0, "vault total supply is not 0");
-
 
         vm.stopPrank();
         vm.startPrank(alice);
@@ -72,5 +77,42 @@ contract P2PVaultUtils is Test {
         asset.approve(address(vault), 10000 ether);
     }
 
+    function save_state() public {
+        alicesAssetBalance = asset.balanceOf(alice);
+        bobsAssetBalance = asset.balanceOf(bob);
+        vaultAssetBalance = asset.balanceOf(address(vault));
+        vaultTotalShares = vault.totalSupply();
+        vaultTotalAssets = vault.totalAssets();
+        bobsShares = vault.balanceOf(bob);
+    }
 
+    function bob_invests_assets(uint256 amount) public {
+        vm.prank(bob);
+        vault.deposit(amount, bob);
+    }
+
+    function alice_uses_assets(uint256 amount) public {
+        vm.prank(alice);
+        vault.useAssets(amount);
+    }
+
+    function alice_charges_fees(uint256 amount) public {
+        vm.prank(alice);
+        vault.fees(amount);
+    }
+
+    function bob_withdraws_assets(uint256 amount) public {
+        vm.prank(bob);
+        vault.withdraw(amount, bob, bob);
+    }
+
+    function bob_buys_shares(uint256 amount) public {
+        vm.prank(bob);
+        vault.mint(amount, bob);
+    }
+
+    function bob_redeems_shares(uint256 amount) public {
+        vm.prank(bob);
+        vault.redeem(amount, bob, bob);
+    }
 }
