@@ -8,9 +8,7 @@ import "../mocks/MockERC20.sol";
 import "../../src/swaps/P2PSwapFactory.sol";
 import "../../src/swaps/P2PSwap.sol";
 
-
 contract P2PSwapFactoryTest is Test {
-
     P2PSwap swapImpl;
     P2PSwapFactory factory;
 
@@ -80,8 +78,6 @@ contract P2PSwapFactoryTest is Test {
         assertEq(feeToken.balanceOf(address(factory)), 10 ether);
         vm.stopPrank();
     }
-
-
 
     function testUpdateFees_ownerOnly() public {
         vm.startPrank(alice);
