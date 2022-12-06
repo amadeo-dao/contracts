@@ -82,9 +82,9 @@ contract P2PVaultUtils is Test {
         bobsShares = vault.balanceOf(bob);
     }
 
-    function bob_invests_assets(uint256 amount) public {
-        vm.prank(bob);
-        vault.deposit(amount, bob);
+    function alice_returns_assets(uint256 amount) public {
+        vm.prank(alice);
+        vault.returnAssets(amount);
     }
 
     function alice_uses_assets(uint256 amount) public {
@@ -95,6 +95,11 @@ contract P2PVaultUtils is Test {
     function alice_charges_fees(uint256 amount) public {
         vm.prank(alice);
         vault.fees(amount);
+    }
+
+    function bob_invests_assets(uint256 amount) public {
+        vm.prank(bob);
+        vault.deposit(amount, bob);
     }
 
     function bob_withdraws_assets(uint256 amount) public {

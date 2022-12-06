@@ -95,5 +95,38 @@ contract P2PVaultTest is P2PVaultUtils {
         );
         assertEq(vault.balanceOf(bob), bobsShares - 35 ether, "Bobs shares did not decrease by 35");
         assertEq(vault.totalSupply(), vaultTotalShares - 35 ether, "Vault shares did not decrease by 35");
+
+        // ...Save state...
+        save_state();
+
+        // Alice returns assets to vault
+        alice_returns_assets(50 ether);
+        assertEq(
+            asset.balanceOf(alice),
+            alicesAssetBalance - 50 ether,
+            "Alices asset balance did not decrease by returned amount"
+        );
+        assertEq(
+            asset.balanceOf(address(vault)),
+            vaultAssetBalance + 50 ether,
+            "Vaults asset balance did not increase by returned amount"
+        );
+
+        // ...Save state...
+        save_state();
+
+        // Bob withdraws all remaining assets
+        uint256 assetsToWithdraw = vault.convertToAssets(bobsShares);
+        assertEq(assetsToWithdraw, vaultTotalAssets, "Bobs assets and vault assets are not equal");
+        bob_withdraws_assets(assetsToWithdraw);
+        assertEq(
+            asset.balanceOf(bob),
+            bobsAssetBalance + assetsToWithdraw,
+            "Bob did not receive the correct amount of tokens"
+        );
+        assertEq(asset.balanceOf(address(vault)), 0 ether, "Vault is not empty");
+        assertEq(vault.totalAssets(), 0, "Vault total assets is not null");
+        assertEq(vault.totalSupply(), 0, "Vault total shares is not null");
+        assertEq(vault.balanceOf(bob), 0, "Shares of bob should null");
     }
 }
