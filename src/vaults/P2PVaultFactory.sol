@@ -23,12 +23,13 @@ contract P2PVaultFactory is Ownable {
     }
 
     function create(
+        address manager_,
         address asset_,
         string memory name_,
         string memory symbol_
     ) external returns (address contractAddress) {
         contractAddress = implementation.clone();
-        P2PVault(contractAddress).initialize(asset_, name_, symbol_);
+        P2PVault(contractAddress).initialize(manager_, asset_, name_, symbol_);
         emit CreateP2PVault(contractAddress, name_, symbol_);
     }
 

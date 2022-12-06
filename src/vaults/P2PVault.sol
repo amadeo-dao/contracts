@@ -5,13 +5,18 @@ import "@openzeppelin-upgradeable/contracts/access/AccessControlEnumerableUpgrad
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
-contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
+contract P2PVault is ERC4626Upgradeable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
-    bytes32 public constant MANAGER_ROLE = keccak256("MANAGER_ROLE");
-    bytes32 public constant SHAREHOLDER_ROLE = keccak256("SHAREHOLDER_ROLE");
+    address public _manager;
+    mapping(address => bool) _shareholders;
 
     uint256 public _assetsInUse;
+
+    modifier onlyManager() {
+        require(_msgSender() == _manager, "P2PVault: Only allowed for manager");
+        _;
+    }
 
     event WhitelistShareholder(address indexed newShareholder);
     event RevokeShareholder(address indexed newShareholder);
@@ -24,74 +29,68 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
     event Loss(uint256 amount);
     event Fees(uint256 amount);
 
-    function initialize(address asset_, string memory name_, string memory symbol_) public initializer {
-        _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _grantRole(MANAGER_ROLE, _msgSender());
-        __AccessControl_init();
+    function initialize(
+        address manager_,
+        address asset_,
+        string memory name_,
+        string memory symbol_
+    ) public initializer {
+        _manager = manager_;
         __ERC20_init(name_, symbol_);
         __ERC4626_init(IERC20Upgradeable(asset_));
     }
 
     function manager() public view returns (address) {
-        return getRoleMember(MANAGER_ROLE, 0);
+        return _manager;
     }
 
-    function setManager(address newManager_) public onlyRole(MANAGER_ROLE) {
+    function setManager(address newManager_) public onlyManager {
         require(newManager_ != address(0), "P2PVault: Manager cannot be null");
-        require(!hasRole(SHAREHOLDER_ROLE, newManager_), "P2PVault: Shareholder cannot be manager");
-        emit ChangeManager(newManager_, manager());
-        _revokeRole(MANAGER_ROLE, manager());
-        _grantRole(MANAGER_ROLE, newManager_);
+        require(!isShareholder(newManager_), "P2PVault: Shareholder cannot be manager");
+        emit ChangeManager(newManager_, _manager);
+        _manager = newManager_;
     }
 
     function isShareholder(address address_) public view returns (bool) {
-        return hasRole(SHAREHOLDER_ROLE, address_);
+        return _shareholders[address_];
     }
 
-    function shareholders() public view returns (uint256) {
-        return getRoleMemberCount(SHAREHOLDER_ROLE);
-    }
-
-    function shareholder(uint256 index) public view returns (address) {
-        return getRoleMember(SHAREHOLDER_ROLE, index);
-    }
-
-    function whitelistShareholder(address address_) public onlyRole(MANAGER_ROLE) {
+    function whitelistShareholder(address address_) public onlyManager {
         require(address_ != address(0), "P2PVault: Shareholder cannot be null");
-        require(!hasRole(SHAREHOLDER_ROLE, _msgSender()), "P2PVault: Manager cannot be shareholder");
-        _grantRole(SHAREHOLDER_ROLE, address_);
+        require(address_ != _manager, "P2PVault: Manager cannot be shareholder");
+        _shareholders[address_] = true;
         emit WhitelistShareholder(address_);
     }
 
-    function revokeShareholder(address address_) public onlyRole(MANAGER_ROLE) {
+    function revokeShareholder(address address_) public onlyManager {
         emit RevokeShareholder(address_);
-        _revokeRole(SHAREHOLDER_ROLE, address_);
+        _shareholders[address_] = false;
     }
 
-    function useAssets(uint256 amount_) public onlyRole(MANAGER_ROLE) {
+    function useAssets(uint256 amount_) public onlyManager {
         IERC20Upgradeable(asset()).safeTransfer(_msgSender(), amount_);
         _assetsInUse += amount_;
         emit UseAssets(amount_);
     }
 
-    function returnAssets(uint256 amount_) public onlyRole(MANAGER_ROLE) {
+    function returnAssets(uint256 amount_) public onlyManager {
         IERC20Upgradeable(asset()).safeTransferFrom(_msgSender(), address(this), amount_);
         _assetsInUse = amount_ > _assetsInUse ? 0 : (_assetsInUse - amount_);
         emit ReturnAssets(amount_);
     }
 
-    function gains(uint256 amount_) public onlyRole(MANAGER_ROLE) {
+    function gains(uint256 amount_) public onlyManager {
         _assetsInUse += amount_;
         emit Gains(amount_);
     }
 
-    function loss(uint256 amount_) public onlyRole(MANAGER_ROLE) {
+    function loss(uint256 amount_) public onlyManager {
         require(amount_ <= _assetsInUse, "P2PVault: Loss cannot be higher than assets in use.");
         _assetsInUse -= amount_;
         emit Loss(amount_);
     }
 
-    function fees(uint256 amount_) public onlyRole(MANAGER_ROLE) {
+    function fees(uint256 amount_) public onlyManager {
         require(amount_ <= _assetsInUse, "P2PVault: Fees cannot be higher than assets in use.");
         _assetsInUse -= amount_;
         emit Fees(amount_);
@@ -115,5 +114,25 @@ contract P2PVault is AccessControlEnumerableUpgradeable, ERC4626Upgradeable {
     function maxRedeem(address owner_) public view virtual override returns (uint256) {
         uint256 maxAssets = maxWithdraw(owner_);
         return _convertToShares(maxAssets, MathUpgradeable.Rounding.Down);
+    }
+
+    function mint(uint256 shares, address receiver) public virtual override returns (uint256) {
+        require(isShareholder(receiver), "P2PVault: Receiver is not a whitelisted shareholder");
+        return ERC4626Upgradeable.mint(shares, receiver);
+    }
+
+    function deposit(uint256 assets, address receiver) public virtual override returns (uint256) {
+        require(isShareholder(receiver), "P2PVault: Receiver is not a whitelisted shareholder");
+        return ERC4626Upgradeable.deposit(assets, receiver);
+    }
+
+    function redeem(uint256 shares, address receiver, address owner) public virtual override returns (uint256) {
+        require(isShareholder(owner), "P2PVault: Owner is not a whitelisted shareholder");
+        return ERC4626Upgradeable.redeem(shares, receiver, owner);
+    }
+
+    function withdraw(uint256 assets, address receiver, address owner) public virtual override returns (uint256) {
+        require(isShareholder(owner), "P2PVault: Owner is not a whitelisted shareholder");
+        return ERC4626Upgradeable.withdraw(assets, receiver, owner);
     }
 }

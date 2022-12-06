@@ -41,7 +41,7 @@ contract P2PVaultUtils is Test {
         vault = new P2PVault();
 
         // Initializing
-        vault.initialize(address(asset), "Test Vault", "VAULT");
+        vault.initialize(deployer, address(asset), "Test Vault", "VAULT");
         assertEq(vault.asset(), address(asset), "vault asset is not asset token");
         assertEq(vault.name(), "Test Vault");
         assertEq(vault.symbol(), "VAULT");
@@ -61,14 +61,10 @@ contract P2PVaultUtils is Test {
         vault.whitelistShareholder(bob);
         asset.approve(address(vault), 10000 ether);
         assertTrue(vault.isShareholder(bob), "Bob is no shareholder");
-        assertEq(vault.shareholders(), 1, "there is not only one shareholder");
-        assertEq(vault.shareholder(0), bob, "First shareholder is not Bob");
 
         vault.whitelistShareholder(charles);
         asset.approve(address(vault), 10000 ether);
         assertTrue(vault.isShareholder(charles), "Charles is no shareholder");
-        assertEq(vault.shareholders(), 2, "there is not only one shareholder");
-        assertEq(vault.shareholder(1), charles, "Second shareholder is not Charles");
 
         vm.stopPrank();
 

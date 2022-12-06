@@ -29,7 +29,7 @@ contract P2PSwapFactoryTest is Test {
     }
 
     function test_Create_Vault() public {
-        address proxy = factory.create(address(asset), "Test Vault", "VAULT");
+        address proxy = factory.create(deployer, address(asset), "Test Vault", "VAULT");
         vm.stopPrank();
         assertTrue(proxy != address(0));
         assertEq(P2PVault(proxy).name(), "Test Vault", "Vault name does not match");
