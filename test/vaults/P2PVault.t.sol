@@ -129,4 +129,19 @@ contract P2PVaultTest is P2PVaultUtils {
         assertEq(vault.totalSupply(), 0, "Vault total shares is not null");
         assertEq(vault.balanceOf(bob), 0, "Shares of bob should null");
     }
+
+    function test_Whitelist() public {
+        // ...Save state...
+        save_state();
+
+        // Deposit and mint for someone not whitlisted
+        assertFalse(vault.isShareholder(charles), "Charles should not be whitelisted");
+        vm.startPrank(bob);
+        vm.expectRevert(bytes("P2PVault: Receiver is not a whitelisted shareholder"));
+        vault.deposit(100 ether, charles);
+        vm.expectRevert(bytes("P2PVault: Receiver is not a whitelisted shareholder"));
+        vault.mint(100 ether, charles);
+
+        // Withdraw and redeem assets from someone not whitelisted
+    }
 }

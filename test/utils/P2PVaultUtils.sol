@@ -66,6 +66,9 @@ contract P2PVaultUtils is Test {
         asset.approve(address(vault), 10000 ether);
         assertTrue(vault.isShareholder(charles), "Charles is no shareholder");
 
+        vault.revokeShareholder(charles);
+        assertFalse(vault.isShareholder(charles), "Charles is still shareholder");
+
         vm.stopPrank();
 
         // Approve token allowance for bob's assets

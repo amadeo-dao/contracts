@@ -127,12 +127,10 @@ contract P2PVault is ERC4626Upgradeable {
     }
 
     function redeem(uint256 shares, address receiver, address owner) public virtual override returns (uint256) {
-        require(isShareholder(owner), "P2PVault: Owner is not a whitelisted shareholder");
         return ERC4626Upgradeable.redeem(shares, receiver, owner);
     }
 
     function withdraw(uint256 assets, address receiver, address owner) public virtual override returns (uint256) {
-        require(isShareholder(owner), "P2PVault: Owner is not a whitelisted shareholder");
         return ERC4626Upgradeable.withdraw(assets, receiver, owner);
     }
 }
