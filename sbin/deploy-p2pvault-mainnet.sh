@@ -2,24 +2,37 @@
 
 . .env
 
-#P2P_VAULT=`forge create --rpc-url $MAINNET_RPC_URL \
-#    --from $MAINNET_DEPLOYER \
-#    --ledger \
-#    --verify \
-#    --etherscan-api-key $ETHERSCAN_API_KEY \
-#    --json \
-#    src/vaults/P2PVault.sol:P2PVault | jq -r .deployedTo`
+GAS_PRICE=`cast gas-price --rpc-url $MAINNET_RPC_URL`
+GAS_PRICE=`cast --to-unit $GAS_PRICE gwei`
+echo "Gas Price: $GAS_PRICE"
 
-P2P_VAULT=0x3774d3f504ff31f442765e1c4c89794D9c0Bd962
+DEPLOY_ARGS=(
+    --interactive
+    --rpc-url 
+    $MAINNET_RPC_URL
+    --json
+)
+
+
+P2P_VAULT=`forge create \
+    ${DEPLOY_ARGS[@]} \
+    src/vaults/P2PVault.sol:P2PVault | jq -r .deployedTo`
 
 echo "P2PVault: $P2P_VAULT"
 
+P2P_VAULT_FACTORY=`forge create src/vaults/P2PVaultFactory.sol:P2PVaultFactory \
+    ${DEPLOY_ARGS[@]} \
+    --constructor-args $P2P_VAULT | jq -r .deployedTo`
 
-forge create src/vaults/P2PVaultFactory.sol:P2PVaultFactory \
-    --rpc-url $MAINNET_RPC_URL \
-    --from $MAINNET_DEPLOYER \
-    --ledger \
-    --verify \
-    --etherscan-api-key $ETHERSCAN_API_KEY \
-    --constructor-args $P2P_VAULT 
+echo "P2PVaultFactory: $P2P_VAULT_FACTORY"
 
+VERIFY_ARGS=(
+)
+
+forge verify-contract $P2P_VAULT src/vaults/P2PVault.sol:P2PVault ${VERIFY_ARGS[@]} 
+
+CTOR_ARGS=`cast abi-encode "constructor(address impl_)" $P2P_VAULT`
+
+forge verify-contract $P2P_VAULT_FACTORY src/vaults/P2PVaultFactory.sol:P2PVaultFactory \
+    --constructor-args $CTOR_ARGS \
+    ${VERIFY_ARGS[@]}
