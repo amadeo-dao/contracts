@@ -215,4 +215,88 @@ contract P2PVaultTest is P2PVaultUtils {
         vm.expectRevert(bytes("P2PVault: Only allowed for manager"));
         vault.setTotalAssets(10 ether);
     }
+
+    function test_Use_and_Return_Assets() public {
+        bob_invests_assets(100 ether);
+
+        // ...Save state...
+        save_state();
+
+        vm.startPrank(alice);
+
+        // Alice uses assets for herself
+        vault.useAssets(alice, 50 ether);
+        assertEq(
+            asset.balanceOf(address(vault)),
+            vaultAssetBalance - 50 ether,
+            "Vault balance should be decreased by 50 ether"
+        );
+        assertEq(
+            asset.balanceOf(alice),
+            alicesAssetBalance + 50 ether,
+            "Alice's asset balance should be increased by 50 ether"
+        );
+        assertEq(vault.assetsInUse(), 50 ether, "Assets in use should be 50 ether");
+
+        // ...Save state...
+        save_state();
+
+        // Alice returns assets to vault
+        vault.returnAssets(alice, 50 ether);
+        assertEq(
+            asset.balanceOf(address(vault)),
+            vaultAssetBalance + 50 ether,
+            "Vault balance should be increased by 50 ether"
+        );
+        assertEq(
+            asset.balanceOf(alice),
+            alicesAssetBalance - 50 ether,
+            "Alice's asset balance should be decreased by 50 ether"
+        );
+        assertEq(vault.assetsInUse(), 0 ether, "Assets in use should be 0 ether");
+
+        // ...Save state...
+        save_state();
+
+        // Alice uses assets for Charles
+        vault.useAssets(charles, 50 ether);
+        assertEq(
+            asset.balanceOf(address(vault)),
+            vaultAssetBalance - 50 ether,
+            "Vault balance should be decreased by 50 ether"
+        );
+        assertEq(asset.balanceOf(alice), alicesAssetBalance, "Alice's asset balance should be unchanged");
+        assertEq(
+            asset.balanceOf(charles),
+            charlesAssetBalance + 50 ether,
+            "Charles' asset balance should be increased by 50 ether"
+        );
+        assertEq(vault.assetsInUse(), 50 ether, "Assets in use should be 50 ether");
+
+        // ...Save state...
+        save_state();
+
+        // Alice returns assets from Charles without allowance
+        vm.expectRevert();
+        vault.returnAssets(charles, 50 ether);
+
+        // Alice returns assets from Charles
+        vm.stopPrank();
+        vm.prank(charles);
+        asset.approve(address(vault), 50 ether);
+        vm.prank(alice);
+        vault.returnAssets(charles, 50 ether);
+        assertEq(
+            asset.balanceOf(address(vault)),
+            vaultAssetBalance + 50 ether,
+            "Vault balance should be increased by 50 ether"
+        );
+        assertEq(asset.balanceOf(alice), alicesAssetBalance, "Alice's asset balance should be unchanged");
+        assertEq(
+            asset.balanceOf(charles),
+            charlesAssetBalance - 50 ether,
+            "Charles' asset balance should be decreased by 50 ether"
+        );
+        assertEq(vault.assetsInUse(), 0 ether, "Assets in use should be 0 ether");
+    }
 }

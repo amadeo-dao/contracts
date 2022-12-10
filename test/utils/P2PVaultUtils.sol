@@ -17,8 +17,10 @@ contract P2PVaultUtils is Test {
     address public bob;
     address public charles;
 
-    uint256 alicesAssetBalance;
+    uint256 public alicesAssetBalance;
     uint256 public bobsAssetBalance;
+    uint256 public charlesAssetBalance;
+
     uint256 public vaultTotalAssets;
     uint256 public vaultAssetBalance;
     uint256 public vaultTotalShares;
@@ -77,6 +79,7 @@ contract P2PVaultUtils is Test {
     function save_state() public {
         alicesAssetBalance = asset.balanceOf(alice);
         bobsAssetBalance = asset.balanceOf(bob);
+        charlesAssetBalance = asset.balanceOf(charles);
         vaultAssetBalance = asset.balanceOf(address(vault));
         vaultTotalShares = vault.totalSupply();
         vaultTotalAssets = vault.totalAssets();
@@ -86,12 +89,12 @@ contract P2PVaultUtils is Test {
 
     function alice_returns_assets(uint256 amount) public {
         vm.prank(alice);
-        vault.returnAssets(amount);
+        vault.returnAssets(alice, amount);
     }
 
     function alice_uses_assets(uint256 amount) public {
         vm.prank(alice);
-        vault.useAssets(amount);
+        vault.useAssets(alice, amount);
     }
 
     function alice_charges_fees(uint256 amount) public {

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin-upgradeable/contracts/access/AccessControlEnumerableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC4626Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 contract P2PVault is ERC4626Upgradeable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
-    address public _manager;
+    address _manager;
     mapping(address => bool) _shareholders;
 
-    uint256 public _assetsInUse;
+    uint256 _assetsInUse;
 
     modifier onlyManager() {
         require(_msgSender() == _manager, "P2PVault: Only allowed for manager");
@@ -23,8 +22,8 @@ contract P2PVault is ERC4626Upgradeable {
 
     event ChangeManager(address indexed newManager, address indexed oldManager);
 
-    event UseAssets(uint256 amount);
-    event ReturnAssets(uint256 amount);
+    event UseAssets(address indexed receiver, uint256 amount);
+    event ReturnAssets(address indexed sender, uint256 amount);
     event Gains(uint256 amount);
     event Loss(uint256 amount);
     event Fees(uint256 amount);
@@ -67,16 +66,16 @@ contract P2PVault is ERC4626Upgradeable {
         _shareholders[address_] = false;
     }
 
-    function useAssets(uint256 amount_) public onlyManager {
-        IERC20Upgradeable(asset()).safeTransfer(_msgSender(), amount_);
+    function useAssets(address receiver_, uint256 amount_) public onlyManager {
+        IERC20Upgradeable(asset()).safeTransfer(receiver_, amount_);
         _assetsInUse += amount_;
-        emit UseAssets(amount_);
+        emit UseAssets(receiver_, amount_);
     }
 
-    function returnAssets(uint256 amount_) public onlyManager {
-        IERC20Upgradeable(asset()).safeTransferFrom(_msgSender(), address(this), amount_);
+    function returnAssets(address sender_, uint256 amount_) public onlyManager {
+        IERC20Upgradeable(asset()).safeTransferFrom(sender_, address(this), amount_);
         _assetsInUse = amount_ > _assetsInUse ? 0 : (_assetsInUse - amount_);
-        emit ReturnAssets(amount_);
+        emit ReturnAssets(sender_, amount_);
     }
 
     function gains(uint256 amount_) public onlyManager {
