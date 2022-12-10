@@ -134,14 +134,85 @@ contract P2PVaultTest is P2PVaultUtils {
         // ...Save state...
         save_state();
 
+        // Revoke shareholder role of charles
+        assertTrue(vault.isShareholder(charles), "Charles is no shareholder");
+        vm.prank(alice);
+        vault.revokeShareholder(charles);
+        assertFalse(vault.isShareholder(charles), "Charles is still shareholder");
+
         // Deposit and mint for someone not whitlisted
         assertFalse(vault.isShareholder(charles), "Charles should not be whitelisted");
         vm.startPrank(bob);
         vm.expectRevert(bytes("P2PVault: Receiver is not a whitelisted shareholder"));
+
         vault.deposit(100 ether, charles);
         vm.expectRevert(bytes("P2PVault: Receiver is not a whitelisted shareholder"));
         vault.mint(100 ether, charles);
+    }
 
-        // Withdraw and redeem assets from someone not whitelisted
+    event Gains(uint256 amount);
+    event Loss(uint256 amount);
+
+    function test_Gains_And_Losses() public {
+        // ...Save state...
+        bob_invests_assets(100 ether);
+        save_state();
+        vm.startPrank(alice);
+
+        // Alice books some gains
+        vm.expectEmit(false, false, false, true);
+        emit P2PVaultTest.Gains(10 ether);
+        vault.gains(10 ether);
+        assertEq(vault.assetsInUse(), vaultAssetsInUse + 10 ether, "Vault has not gained 10 tokens");
+
+        // ...Save state...
+        save_state();
+
+        // Alice books some losses
+        vm.expectEmit(false, false, false, true);
+        emit P2PVaultTest.Loss(5 ether);
+        vault.loss(5 ether);
+        assertEq(vault.assetsInUse(), vaultAssetsInUse - 5 ether, "Vault has not lost 5 tokens");
+        vm.expectRevert(bytes("P2PVault: Loss cannot be higher than assets in use"));
+        vault.loss(10 ether);
+
+        // ...Save state...
+        save_state();
+
+        // Alice changes assets in use
+        vm.expectEmit(false, false, false, true);
+        emit P2PVaultTest.Gains(15 ether);
+        vault.setAssetsInUse(20 ether);
+        assertEq(vault.assetsInUse(), 20 ether, "Vault has not 20 tokens in use");
+
+        // Alice increases vault total assets
+        vm.expectEmit(false, false, false, true);
+        emit P2PVaultTest.Gains(20 ether);
+        vault.setTotalAssets(140 ether);
+        assertEq(vault.assetsInUse(), 40 ether, "Vault has not 40 tokens in use");
+        assertEq(vaultAssetBalance, asset.balanceOf(address(vault)), "Vaults asset balance is unchanged");
+
+        // Alice decreases vault total assets
+        vm.expectEmit(false, false, false, true);
+        emit P2PVaultTest.Loss(10 ether);
+        vault.setTotalAssets(130 ether);
+        assertEq(vault.assetsInUse(), 30 ether, "Vault has not 30 tokens in use");
+        assertEq(vaultAssetBalance, asset.balanceOf(address(vault)), "Vaults asset balance is unchanged");
+
+        // Alice decreases vault total assets under current balance
+        vm.expectRevert(bytes("P2PVault: Assets in use cannot be less than vault balance"));
+        vault.setTotalAssets(90 ether);
+
+        // Check access rights.
+        vm.stopPrank();
+        vm.startPrank(bob);
+        vm.expectRevert(bytes("P2PVault: Only allowed for manager"));
+        vault.gains(10 ether);
+        vm.expectRevert(bytes("P2PVault: Only allowed for manager"));
+        vault.loss(10 ether);
+        vm.expectRevert(bytes("P2PVault: Only allowed for manager"));
+        vault.setAssetsInUse(10 ether);
+        vm.expectRevert(bytes("P2PVault: Only allowed for manager"));
+        vault.setTotalAssets(10 ether);
     }
 }

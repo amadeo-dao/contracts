@@ -85,15 +85,27 @@ contract P2PVault is ERC4626Upgradeable {
     }
 
     function loss(uint256 amount_) public onlyManager {
-        require(amount_ <= _assetsInUse, "P2PVault: Loss cannot be higher than assets in use.");
+        require(amount_ <= _assetsInUse, "P2PVault: Loss cannot be higher than assets in use");
         _assetsInUse -= amount_;
         emit Loss(amount_);
     }
 
     function fees(uint256 amount_) public onlyManager {
-        require(amount_ <= _assetsInUse, "P2PVault: Fees cannot be higher than assets in use.");
+        require(amount_ <= _assetsInUse, "P2PVault: Fees cannot be higher than assets in use");
         _assetsInUse -= amount_;
         emit Fees(amount_);
+    }
+
+    function setTotalAssets(uint256 amount_) public onlyManager {
+        uint256 assetBalance = IERC20Upgradeable(asset()).balanceOf(address(this));
+        require(amount_ >= assetBalance, "P2PVault: Assets in use cannot be less than vault balance");
+        setAssetsInUse(amount_ - assetBalance);
+    }
+
+    function setAssetsInUse(uint256 amount_) public onlyManager {
+        uint256 aiu = assetsInUse();
+        if (amount_ >= aiu) gains(amount_ - aiu);
+        else loss(aiu - amount_);
     }
 
     function assetsInUse() public view virtual returns (uint256) {
