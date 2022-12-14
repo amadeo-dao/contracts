@@ -8,12 +8,9 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "../utils/math/DecimalMath.sol";
 
-/**
- * @title ERC20MultiDividendable
- * @dev Implements an ERC20Mintable token with a dividend distribution procedure for dividendTokens received
- * @notice This contract was implemented from algorithms proposed by Nick Johnson here: https://medium.com/@weka/dividend-bearing-tokens-on-ethereum-42d01c710657
- */
-contract P2PStaking is ERC20Upgradeable {
+import "../utils/access/Whitelistable.sol";
+
+contract Dividends is ERC20Upgradeable, Whitelistable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
     using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -26,36 +23,36 @@ contract P2PStaking is ERC20Upgradeable {
     mapping(uint256 => address) public dividendTokens;
     uint256 public tokenIndex;
 
-    function initialize(address asset_, string memory name_, string memory symbol_) public initializer {
+    function initialize(
+        address manager_,
+        address asset_,
+        string memory name_,
+        string memory symbol_
+    ) public initializer {
         __ERC20_init(name_, symbol_);
+        __Whitelistable_init(manager_);
         _asset = IERC20Upgradeable(asset_);
     }
 
-    /**
-     * @notice Send dividendTokens to this function in order to increase the dividends pool
-     * @dev Must have approved this contract to spend amount of dividendToken from msg.sender
-     * @param amount The amount of dividendTokens to transfer from msg.sender to this contract
-     * @param dividendToken The address of the token you wish to transfer to this contract
-     */
-    function releaseDividends(uint256 amount, address dividendToken) external virtual {
+    function payout(uint256 amount, address dividendToken) external virtual onlyManager {
         resolveDividendToken(dividendToken);
         IERC20Upgradeable(dividendToken).transferFrom(msg.sender, address(this), amount);
         uint256 releasedDividends = amount.divd(this.totalSupply(), this.decimals());
         dividendsPerToken[dividendToken] = dividendsPerToken[dividendToken].add(releasedDividends);
     }
 
-    /**
-     * @dev Function to update an account
-     * @param account The account to update
-     * @param dividendToken The address of the token you wish to transfer to this contract
-     * @notice Will revert if account need not be updated
-     */
-    function claimDividends(address payable account, address dividendToken) public virtual returns (uint256) {
-        uint owing = dividendsOwing(account, dividendToken);
+    function claim(address account, address dividendToken) public virtual returns (uint256) {
+        uint owing = claimable(account, dividendToken);
         if (owing == 0) return 0;
         lastDPT[account][dividendToken] = dividendsPerToken[dividendToken];
         IERC20Upgradeable(dividendToken).transfer(account, owing);
         return owing;
+    }
+
+    function claimAll(address account_) public virtual {
+        for (uint256 i = 0; i < tokenIndex; i++) {
+            claim(account_, dividendTokens[i]);
+        }
     }
 
     function resolveDividendToken(address dividendToken) internal {
@@ -68,23 +65,21 @@ contract P2PStaking is ERC20Upgradeable {
         tokenIndex = tokenIndex + 1;
     }
 
-    /**
-     * @dev Internal function to compute dividends owing to an account
-     * @param account The account for which to compute the dividends
-     * @param dividendToken The address of the token you wish to transfer to this contract
-     */
-    function dividendsOwing(address account, address dividendToken) internal view returns (uint256) {
+    function claimable(address account, address dividendToken) public view returns (uint256) {
         uint256 owedDividendsPerToken = dividendsPerToken[dividendToken].subd(lastDPT[account][dividendToken]);
         return this.balanceOf(account).muld(owedDividendsPerToken, this.decimals());
     }
 
-    function deposit(address account_, uint256 amount_) public {
+    function deposit(address account_, uint256 amount_) public onlyWhitelisted {
         _asset.safeTransferFrom(_msgSender(), address(this), amount_);
         _mint(account_, amount_);
+        claimAll(account_);
     }
 
-    function withdraw(address account_, uint256 amount_) public {
-        // _asset.safeTransfer(account_, _msgSender(), amount_); // ???
+    function withdraw(address recipient_, uint256 amount_) public {
+        require(balanceOf(_msgSender()) >= amount_, "P2PStaking: Insufficient staking balance");
+        _asset.safeTransfer(recipient_, amount_); // ???
+        _burn(_msgSender(), amount_);
     }
 
     function asset() public view returns (address) {
