@@ -5,10 +5,10 @@ import "forge-std/Test.sol";
 
 import "../mocks/MockERC20.sol";
 
-import "../../src/staking/Dividends.sol";
+import "../../src/staking/P2PStaking.sol";
 
-contract DividendsTest is Test {
-    Dividends public dividends;
+contract P2PStakingTest is Test {
+    P2PStaking public staking;
 
     MockERC20 asset;
     MockERC20 rewards1;
@@ -30,13 +30,13 @@ contract DividendsTest is Test {
 
     function save_state() public {
         bobsAssetBalance = asset.balanceOf(bob);
-        contractsAssetBalance = asset.balanceOf(address(dividends));
-        bobsShares = dividends.balanceOf(bob);
-        totalShares = dividends.totalSupply();
+        contractsAssetBalance = asset.balanceOf(address(staking));
+        bobsShares = staking.sharesOf(bob);
+        totalShares = staking.totalShares();
 
         bobsRewards1Balance = rewards1.balanceOf(bob);
-        charlesRewards1Balance = rewards1.balanceOf(bob);
-        contractRewards1Balance = rewards1.balanceOf(address(dividends));
+        charlesRewards1Balance = rewards1.balanceOf(charles);
+        contractRewards1Balance = rewards1.balanceOf(address(staking));
     }
 
     function setUp() public {
@@ -49,83 +49,94 @@ contract DividendsTest is Test {
         rewards1 = new MockERC20("Rewards #1", "REWARDS1");
 
         vm.startPrank(deployer);
-        dividends = new Dividends();
-        dividends.initialize(alice, address(asset), "Staked Asset", "xSTAKED");
+        staking = new P2PStaking();
+        staking.initialize(alice, address(asset));
         vm.stopPrank();
 
         vm.startPrank(alice);
-        dividends.whitelistAddress(bob);
-        dividends.whitelistAddress(charles);
+        staking.whitelistAddress(bob);
+        staking.whitelistAddress(charles);
         vm.stopPrank();
 
-        assertEq(dividends.manager(), alice, "Alice is not manager");
-        assertEq(dividends.asset(), address(asset), "Staking Asset is not set");
-        assertTrue(dividends.isWhitelisted(bob), "Bob is not whitelisted");
-        assertTrue(dividends.isWhitelisted(charles), "Charles is not whitelisted");
+        assertEq(staking.manager(), alice, "Alice is not manager");
+        assertEq(staking.asset(), address(asset), "Staking Asset is not set");
+        assertTrue(staking.isWhitelisted(bob), "Bob is not whitelisted");
+        assertTrue(staking.isWhitelisted(charles), "Charles is not whitelisted");
 
         asset.mint(bob, 10000 ether);
         asset.mint(charles, 10000 ether);
         rewards1.mint(alice, 10000 ether);
 
         vm.prank(bob);
-        asset.approve(address(dividends), 10000 ether);
+        asset.approve(address(staking), 10000 ether);
         vm.prank(charles);
-        asset.approve(address(dividends), 10000 ether);
+        asset.approve(address(staking), 10000 ether);
         vm.prank(alice);
-        rewards1.approve(address(dividends), 10000 ether);
+        rewards1.approve(address(staking), 10000 ether);
     }
 
     function test_FullLifecycle() public {
         save_state();
 
         vm.prank(bob);
-        dividends.deposit(bob, 1000 ether);
+        staking.stake(1000 ether);
         assertEq(asset.balanceOf(bob), bobsAssetBalance - 1000 ether, "Bob did not deposit 1000 tokens");
         assertEq(
-            asset.balanceOf(address(dividends)),
+            asset.balanceOf(address(staking)),
             contractsAssetBalance + 1000 ether,
             "Contract did not receive 1000 tokens"
         );
-        assertEq(dividends.balanceOf(bob), bobsShares + 1000 ether, "Bob did not receive enogh shares");
-        assertEq(dividends.totalSupply(), totalShares + 1000 ether, "Total shares are incorrect");
+        assertEq(staking.sharesOf(bob), bobsShares + 1000 ether, "Bob did not receive enogh shares");
+        assertEq(staking.totalShares(), totalShares + 1000 ether, "Total shares are incorrect");
 
         vm.prank(alice);
-        dividends.payout(100 ether, address(rewards1));
-        assertEq(rewards1.balanceOf(address(dividends)), 100 ether, "Contract did not receive 100 rewards");
+        staking.distribute(100 ether, address(rewards1));
+        assertEq(rewards1.balanceOf(address(staking)), 100 ether, "Contract did not receive 100 rewards");
 
         save_state();
 
         vm.prank(bob);
-        dividends.claim(bob, address(rewards1));
+        staking.claim(address(rewards1));
         assertEq(rewards1.balanceOf(bob), bobsRewards1Balance + 100 ether, "Bob did not receive any reward1 tokens");
         assertEq(
-            rewards1.balanceOf(address(dividends)),
+            rewards1.balanceOf(address(staking)),
             contractRewards1Balance - 100 ether,
             "Contract did not send correct number of reward1 tokens"
         );
 
         vm.prank(charles);
-        dividends.deposit(charles, 200 ether);
+        staking.stake(200 ether);
 
         vm.prank(alice);
-        dividends.payout(240 ether, address(rewards1));
+        staking.distribute(240 ether, address(rewards1));
 
         save_state();
         vm.prank(bob);
-        dividends.claim(bob, address(rewards1));
+        staking.claim(address(rewards1));
         assertEq(
             rewards1.balanceOf(bob),
             bobsRewards1Balance + 200 ether,
             "Bob did not receive the correct share of rewards"
         );
         vm.prank(charles);
-        uint256 claimable = dividends.claimable(charles, address(rewards1));
-        console.log(claimable);
-        dividends.claim(charles, address(rewards1));
+        staking.claim(address(rewards1));
         assertEq(
             rewards1.balanceOf(charles),
             charlesRewards1Balance + 40 ether,
             "Charles did not receive the correct share of rewards"
         );
+
+        save_state();
+
+        vm.prank(bob);
+        staking.unstake(1000 ether);
+        assertEq(
+            asset.balanceOf(address(staking)),
+            contractsAssetBalance - 1000 ether,
+            "Contract did not pay back assets"
+        );
+        assertEq(asset.balanceOf(bob), bobsAssetBalance + 1000 ether, "Bob did not receive his assets back");
+        assertEq(staking.totalShares(), totalShares - 1000 ether, "Contract did not reduce number of shares correctly");
+        assertEq(staking.sharesOf(bob), 0, "Bob has still shares");
     }
 }
