@@ -5,13 +5,13 @@ import "forge-std/Test.sol";
 
 import "../mocks/MockERC20.sol";
 
-import "../../src/staking/P2PStaking.sol";
+import "../../src/staking/P2PDividends.sol";
 
 contract P2PStakingTest is Test {
-    P2PStaking public staking;
+    P2PDividends public staking;
 
     MockERC20 asset;
-    MockERC20 rewards1;
+    MockERC20 dividends1;
 
     address public deployer;
     address public alice;
@@ -34,9 +34,9 @@ contract P2PStakingTest is Test {
         bobsShares = staking.sharesOf(bob);
         totalShares = staking.totalShares();
 
-        bobsRewards1Balance = rewards1.balanceOf(bob);
-        charlesRewards1Balance = rewards1.balanceOf(charles);
-        contractRewards1Balance = rewards1.balanceOf(address(staking));
+        bobsRewards1Balance = dividends1.balanceOf(bob);
+        charlesRewards1Balance = dividends1.balanceOf(charles);
+        contractRewards1Balance = dividends1.balanceOf(address(staking));
     }
 
     function setUp() public {
@@ -46,10 +46,10 @@ contract P2PStakingTest is Test {
         charles = makeAddr("charles");
 
         asset = new MockERC20("Staking Asset", "STAKED");
-        rewards1 = new MockERC20("Rewards #1", "REWARDS1");
+        dividends1 = new MockERC20("Rewards #1", "REWARDS1");
 
         vm.startPrank(deployer);
-        staking = new P2PStaking();
+        staking = new P2PDividends();
         staking.initialize(alice, address(asset));
         vm.stopPrank();
 
@@ -65,21 +65,21 @@ contract P2PStakingTest is Test {
 
         asset.mint(bob, 10000 ether);
         asset.mint(charles, 10000 ether);
-        rewards1.mint(alice, 10000 ether);
+        dividends1.mint(alice, 10000 ether);
 
         vm.prank(bob);
         asset.approve(address(staking), 10000 ether);
         vm.prank(charles);
         asset.approve(address(staking), 10000 ether);
         vm.prank(alice);
-        rewards1.approve(address(staking), 10000 ether);
+        dividends1.approve(address(staking), 10000 ether);
     }
 
     function test_FullLifecycle() public {
         save_state();
 
         vm.prank(bob);
-        staking.stake(1000 ether);
+        staking.deposit(1000 ether);
         assertEq(asset.balanceOf(bob), bobsAssetBalance - 1000 ether, "Bob did not deposit 1000 tokens");
         assertEq(
             asset.balanceOf(address(staking)),
@@ -90,38 +90,38 @@ contract P2PStakingTest is Test {
         assertEq(staking.totalShares(), totalShares + 1000 ether, "Total shares are incorrect");
 
         vm.prank(alice);
-        staking.distribute(100 ether, address(rewards1));
-        assertEq(rewards1.balanceOf(address(staking)), 100 ether, "Contract did not receive 100 rewards");
+        staking.distribute(100 ether, address(dividends1));
+        assertEq(dividends1.balanceOf(address(staking)), 100 ether, "Contract did not receive 100 rewards");
 
         save_state();
 
         vm.prank(bob);
-        staking.claim(address(rewards1));
-        assertEq(rewards1.balanceOf(bob), bobsRewards1Balance + 100 ether, "Bob did not receive any reward1 tokens");
+        staking.claim(address(dividends1));
+        assertEq(dividends1.balanceOf(bob), bobsRewards1Balance + 100 ether, "Bob did not receive any reward1 tokens");
         assertEq(
-            rewards1.balanceOf(address(staking)),
+            dividends1.balanceOf(address(staking)),
             contractRewards1Balance - 100 ether,
             "Contract did not send correct number of reward1 tokens"
         );
 
         vm.prank(charles);
-        staking.stake(200 ether);
+        staking.deposit(200 ether);
 
         vm.prank(alice);
-        staking.distribute(240 ether, address(rewards1));
+        staking.distribute(240 ether, address(dividends1));
 
         save_state();
         vm.prank(bob);
-        staking.claim(address(rewards1));
+        staking.claim(address(dividends1));
         assertEq(
-            rewards1.balanceOf(bob),
+            dividends1.balanceOf(bob),
             bobsRewards1Balance + 200 ether,
             "Bob did not receive the correct share of rewards"
         );
         vm.prank(charles);
-        staking.claim(address(rewards1));
+        staking.claim(address(dividends1));
         assertEq(
-            rewards1.balanceOf(charles),
+            dividends1.balanceOf(charles),
             charlesRewards1Balance + 40 ether,
             "Charles did not receive the correct share of rewards"
         );
@@ -129,7 +129,7 @@ contract P2PStakingTest is Test {
         save_state();
 
         vm.prank(bob);
-        staking.unstake(1000 ether);
+        staking.withdraw(1000 ether);
         assertEq(
             asset.balanceOf(address(staking)),
             contractsAssetBalance - 1000 ether,
